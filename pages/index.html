@@ -1,21 +1,62 @@
 <!DOCTYPE html>
 <html>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/> <!--320-->
 <head>
   <title>Jellyfish</title>
   <script src="rhizome/rhizome.js"></script>
   <script src="js/jquery-2.1.0.min.js"></script>
-  <script src="js/nexusUI.js"></script>
-  <script src="js/Tone.js"></script>
-  <link rel="stylesheet" type="text/css" href="css/styles.css" />
+  <script src="js/monkeypatch.js"></script>
+  <script src="js/synths.js"></script>
+  <link rel="stylesheet" type="text/css" href="jellyfish.css" />
   <script>
     var myId;
+    var freqs = [130.8127826503, 146.8323839587, 155.56349186104, 174.6141157165, 195.99771799087, 207.65234878997, 233.08188075904, 261.6255653006, 293.66476791741, 311.12698372208, 349.228231433, 391.99543598175, 415.30469757995, 466.16376151809, 587.32953583482 ];
+    var shades = ["#26256F", "#302F8C", "#3937A6", "#4140BF", "#4A48D9", "#5351F2", "#5755FF"];
+    var freqIndex = 0;
+    var time=Date.now();
+    var interval = 1000000;
     $(function() {
-      
-      t = new Tone.Oscillator(340, "sine");
-      t.start()
-      t.volume.value = -100
-      t.toMaster()
-
+      $( "#jellyfish" ).click(function() {
+        // var freqIndex = Math.ceil(linlin(
+        //   Date.now() - time, 150, 600, freqs.length-1, 0));
+        var speed = (Date.now() - time);
+        if (speed < 300){ // fast press
+          freqIndex = freqIndex + 1;
+        }else if (speed > 500){ // slow press
+          freqIndex = freqIndex - 1;
+        }
+        $('body').css("background-color",shadeColor(
+          "#26256F",linlin(freqIndex, 0, freqs.length-1, -0.8, 0.6)));
+        time = Date.now();
+        if(freqIndex == freqs.length){
+          freqIndex = freqs.length-1;
+        }else if(freqIndex < 0){
+          freqIndex = 0;
+        }
+        // make a new synth
+        var vco = new VCO('sine', 230, 0.5);
+        var mod = new VCO('sine', 4, 5);
+        var atk = 0.1;
+        var rls = 0.5;
+        vco.setFrequency(freqs[freqIndex]);
+        // connect gain of modulator to freq of carrier
+        mod.gain.connect(vco.oscillator.frequency);
+        // connect carrier to VCA 
+        var vca = new VCA;
+        vco.connect(vca);
+        var envelope = new AR_EnvelopeGenerator(0.5);
+        envelope.attackTime=atk;
+        envelope.releaseTime=rls;
+        envelope.connect(vca.amplitude);
+        // connect VCA to output
+        vca.connect(context.destination);
+        vco.oscillator.start(context.currentTime);
+        vco.oscillator.stop(context.currentTime+atk+rls);
+        mod.oscillator.start(context.currentTime);
+        mod.oscillator.stop(context.currentTime+atk+rls);
+        
+        envelope.trigger();
+      });
 
       rhizome.start(function(err) {
         if (err) {
@@ -58,11 +99,8 @@
             }
             $("#userList").html(userStrings.join(", "));
             break;
-          case '/slider1':
-            t.volume.value = nx.scale(args[0],0,1,-90,0);
-            break;
           case '/freq':
-            t.frequency.value = args[0];
+            freq = args[0];
             break;
           default: 
             console.log(address + " ::: " + args);
@@ -83,17 +121,36 @@
 
     })
 
-    nx.onload = function() {
-      meter1.setup(Tone.context,t)
+    // Maps linear range to another linear range, with clipping
+    function linlin (number, min, max, newMin, newMax){
+      if(number < min){
+        return newMin;
+      }else if(number > max){
+        return newMax;
+      }
+      return (((number - min) * (newMax - newMin)) / (max - min)) + newMin;
+    }
+
+    // change brightness of a hexadecimal color
+    function shadeColor(color, percent) {   
+      var f=parseInt(color.slice(1),16),t=percent<0?0:255,p=percent<0?percent*-1:percent,R=f>>16,G=f>>8&0x00FF,B=f&0x0000FF;
+      return "#"+(0x1000000+(Math.round((t-R)*p)+R)*0x10000+(Math.round((t-G)*p)+G)*0x100+(Math.round((t-B)*p)+B)).toString(16).slice(1);
+    }
+    // blend two colors
+    function blendColors(c0, c1, p) {
+      var f=parseInt(c0.slice(1),16),t=parseInt(c1.slice(1),16),R1=f>>16,G1=f>>8&0x00FF,B1=f&0x0000FF,R2=t>>16,G2=t>>8&0x00FF,B2=t&0x0000FF;
+      return "#"+(0x1000000+(Math.round((R2-R1)*p)+R1)*0x10000+(Math.round((G2-G1)*p)+G1)*0x100+(Math.round((B2-B1)*p)+B1)).toString(16).slice(1);
     }
   </script>
 </head>
 
 <body>
-  <canvas nx="meter" style="height:300px;width:100px"></canvas>
+  <img id="jellyfish" src="img/jellyfish-icon.png">
   <hr>
+  <div id="debug">
   Latest message: <span id="message"></span><br>
   Connected users: <span id="userList"></span>
+  </div>
 </body>
 
 </html>

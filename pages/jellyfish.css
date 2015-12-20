@@ -1,0 +1,12 @@
+body {
+	text-align: center;
+	background-color: #080716;
+}
+
+canvas {
+	margin:30px;
+}
+
+#debug {
+	text-align: left;
+}
