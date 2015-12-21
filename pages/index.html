@@ -3,123 +3,189 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/> <!--320-->
 <head>
   <title>Jellyfish</title>
+  <script src='js/fastclick.js'></script>
   <script src="rhizome/rhizome.js"></script>
   <script src="js/jquery-2.1.0.min.js"></script>
+  <script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/jquery-ui.min.js"></script>
+  <script src="js/util.js"></script>
   <script src="js/monkeypatch.js"></script>
   <script src="js/synths.js"></script>
   <link rel="stylesheet" type="text/css" href="jellyfish.css" />
   <script>
+  $( document ).ready(function(){
+    $(function() {
+      FastClick.attach(document.body);
+    });
+    var context = new AudioContext();
     var myId;
+    var imgChangeTimeout;
+    var imgPosResetTimeout;
     var freqs = [130.8127826503, 146.8323839587, 155.56349186104, 174.6141157165, 195.99771799087, 207.65234878997, 233.08188075904, 261.6255653006, 293.66476791741, 311.12698372208, 349.228231433, 391.99543598175, 415.30469757995, 466.16376151809, 587.32953583482 ];
+    var pads = new Array();
+    var padEnv;
     var shades = ["#26256F", "#302F8C", "#3937A6", "#4140BF", "#4A48D9", "#5351F2", "#5755FF"];
     var freqIndex = 0;
-    var time=Date.now();
+    var lastClick=Date.now();
     var interval = 1000000;
-    $(function() {
-      $( "#jellyfish" ).click(function() {
-        // var freqIndex = Math.ceil(linlin(
-        //   Date.now() - time, 150, 600, freqs.length-1, 0));
-        var speed = (Date.now() - time);
-        if (speed < 300){ // fast press
-          freqIndex = freqIndex + 1;
-        }else if (speed > 500){ // slow press
-          freqIndex = freqIndex - 1;
-        }
-        $('body').css("background-color",shadeColor(
-          "#26256F",linlin(freqIndex, 0, freqs.length-1, -0.8, 0.6)));
-        time = Date.now();
-        if(freqIndex == freqs.length){
-          freqIndex = freqs.length-1;
-        }else if(freqIndex < 0){
+    var isPaused = false;
+    var driftDown = setInterval(function(){ 
+      // jellyfish always goin' down...
+      if((Date.now() - lastClick > 250)){
+        freqIndex = freqIndex - 1;
+        if(freqIndex < 0){
           freqIndex = 0;
-        }
-        // make a new synth
-        var vco = new VCO('sine', 230, 0.5);
-        var mod = new VCO('sine', 4, 5);
-        var atk = 0.1;
-        var rls = 0.5;
-        vco.setFrequency(freqs[freqIndex]);
-        // connect gain of modulator to freq of carrier
-        mod.gain.connect(vco.oscillator.frequency);
-        // connect carrier to VCA 
-        var vca = new VCA;
-        vco.connect(vca);
-        var envelope = new AR_EnvelopeGenerator(0.5);
-        envelope.attackTime=atk;
-        envelope.releaseTime=rls;
-        envelope.connect(vca.amplitude);
-        // connect VCA to output
-        vca.connect(context.destination);
-        vco.oscillator.start(context.currentTime);
-        vco.oscillator.stop(context.currentTime+atk+rls);
-        mod.oscillator.start(context.currentTime);
-        mod.oscillator.stop(context.currentTime+atk+rls);
-        
-        envelope.trigger();
-      });
+       };
+       $('body').animate({
+          backgroundColor: shadeColor("#26256F",linlin(
+           freqIndex, 0, freqs.length-1, -0.8, 0.6)),
+        }, 500);
+     };
+    }, 500);
 
-      rhizome.start(function(err) {
-        if (err) {
-          $('body').html('client failed starting : ' + err)
-          throw err
-        }
+    // Handle touch or click events:
+    $( "#jellyarea" ).click(function() {
+      var speed = (Date.now() - lastClick);
+      lastClick = Date.now();
+      // change img
+      $('#jellyfishicon').attr('src', "img/jellyfish-icon.png");
+      clearTimeout(imgChangeTimeout);
+      clearTimeout(imgPosResetTimeout);
+      imgChangeTimeout = setTimeout(function(){
+        $('#jellyfishicon').attr('src', "img/jellyfish-icon-2.png");
+      }, 100);
+      // animate img
+      $( "#jellyfishicon" ).animate({
+        top: "-=10",
+      }, 80);
+      imgPosResetTimeout = setTimeout(function(){
+        $( "#jellyfishicon" ).animate({
+          top: "10px",
+        }, 80);
+      }, 20);
+      if (speed < 280){ // fast press
+        freqIndex = freqIndex + 1;
+      }else if (speed > 500){ // slow press
+        freqIndex = freqIndex;
+      }
+      $('body').stop(true,false);
+      $('body').animate({
+        backgroundColor: shadeColor("#26256F",linlin(
+          freqIndex, 0, freqs.length-1, -0.8, 0.6)),
+      }, 100);
+      if(freqIndex >= freqs.length){
+        freqIndex = freqs.length-1;
+      }else if(freqIndex < 0){
+        freqIndex = 0;
+      }
+      // make a new synth
+      var vco = new VCO(context, 'sine', 230, 0.5);
+      var mod = new VCO(context, 'sine', 4, 460);
+      var atk = 0.1;
+      var rls = 0.5;
+      vco.setFrequency(freqs[Math.floor(freqIndex)]);
+      var mult = [1.0,2.0,1.5,(5/3),(5/2)].choose();
+      mod.setFrequency(mult*freqs[Math.floor(freqIndex)]);
+      // connect gain of modulator to freq of carrier
+      mod.gain.connect(vco.oscillator.frequency);
+      // connect carrier to VCA 
+      var vca = new VCA(context);
+      vco.connect(vca);
+      var envelope = new AR_EnvelopeGenerator(context,0.5);
+      envelope.attackTime=atk;
+      envelope.releaseTime=rls;
+      envelope.connect(vca.amplitude);
+      // connect VCA to output
+      vca.connect(context.destination);
+      vco.oscillator.start(context.currentTime);
+      vco.oscillator.stop(context.currentTime+atk+rls);
+      mod.oscillator.start(context.currentTime);
+      mod.oscillator.stop(context.currentTime+atk+rls);
+      
+      envelope.trigger();
+    });
 
-        $('#send').submit(function(event) {
-          event.preventDefault()
-          var address = $('#address').val()
-            , args = $('#args').val()
-          if (args.length)
-            args = args.split(' ').map(function(arg) { return JSON.parse(arg) })
-          else args = []
-          rhizome.send(address, args)
-        })
-        // Make a unique ID based on rhizome id.
-        myId = rhizome.id;
+    // make a pad
+    var padFreqs = freqs.slice(5,10);
+    var padVCA = new VCA(context);
+    for (var i=0; i<5; i++){
+      pads.push(new VCO(context, 'sawtooth', padFreqs[i], 1));
+      pads[i].connect(padVCA);
+      pads[i].oscillator.start(context.currentTime);
+    };
+    padEnv = new AR_EnvelopeGenerator(context,0.05);
+    padEnv.attackTime=3;
+    padEnv.releaseTime=3;
+    padEnv.connect(padVCA.amplitude);
+    padVCA.connect(context.destination);
 
-        // We want to receive all the messages, so we subscribe to '/'
-        rhizome.send('/sys/subscribe', ['/'])
+    // Rhizome networking code
+    rhizome.start(function(err) {
+      if (err) {
+        $('body').html('client failed starting : ' + err)
+        throw err
+      }
 
-        // Get user IDs.
-        rhizome.send('/getPlayers', ['/'])
+      $('#send').submit(function(event) {
+        event.preventDefault()
+        var address = $('#address').val()
+          , args = $('#args').val()
+        if (args.length)
+          args = args.split(' ').map(function(arg) { return JSON.parse(arg) })
+        else args = []
+        rhizome.send(address, args)
       })
-      var userList = {}; // keep track of connected users.
-      rhizome.on('message', function(address, args) {
-        $("#message").html(address + ", " + args);
-        switch (address) {
-          case '/sys/connections//':
-            break;
-          case '/getPlayers':
-            rhizome.send('/addPlayer', [myId]);
-            break;
-          case '/addPlayer':
-            userList[args] = true;
-            var userStrings = [];
-            for (var user in userList){
-              userStrings.push(user.substring(0,4));
-            }
-            $("#userList").html(userStrings.join(", "));
-            break;
-          case '/freq':
-            freq = args[0];
-            break;
-          default: 
-            console.log(address + " ::: " + args);
-        }
-      })
+      // Make a unique ID based on rhizome id.
+      myId = rhizome.id;
 
-      rhizome.on('connected', function() {
-        console.log('connected!')
-      })
+      // We want to receive all the messages, so we subscribe to '/'
+      rhizome.send('/sys/subscribe', ['/'])
 
-      rhizome.on('connection lost', function() {
-        console.log('connection lost!')
-      })
+      // Get user IDs.
+      rhizome.send('/getPlayers', ['/'])
+    });
 
-      rhizome.on('queued', function() {
-        console.log('queued!')
-      })
+    var userList = {}; // keep track of connected users.
+    // handle messages
+    rhizome.on('message', function(address, args) {
+      $("#message").html(address + ", " + args);
+      switch (address) {
+        case '/sys/connections//':
+          break;
+        case '/getPlayers':
+          rhizome.send('/addPlayer', [myId]);
+          break;
+        case '/addPlayer':
+          userList[args] = true;
+          var userStrings = [];
+          for (var user in userList){
+            userStrings.push(user.substring(0,4));
+          }
+          $("#userList").html(userStrings.join(", "));
+          break;
+        case '/freqs':
+          freqs = args;
+          var padFreqs = freqs.slice(5,10);
+          for (var i=0; i<pads.length; i++){
+            pads[i].setFrequency(padFreqs[i]);
+          };
+          padEnv.trigger();
+          break;
+        default: 
+          console.log(address + " ::: " + args);
+      }
+    });
 
-    })
+    rhizome.on('connected', function() {
+      console.log('connected!')
+    });
+
+    rhizome.on('connection lost', function() {
+      console.log('connection lost!')
+    });
+
+    rhizome.on('queued', function() {
+      console.log('queued!')
+    });
 
     // Maps linear range to another linear range, with clipping
     function linlin (number, min, max, newMin, newMax){
@@ -136,16 +202,22 @@
       var f=parseInt(color.slice(1),16),t=percent<0?0:255,p=percent<0?percent*-1:percent,R=f>>16,G=f>>8&0x00FF,B=f&0x0000FF;
       return "#"+(0x1000000+(Math.round((t-R)*p)+R)*0x10000+(Math.round((t-G)*p)+G)*0x100+(Math.round((t-B)*p)+B)).toString(16).slice(1);
     }
+
     // blend two colors
     function blendColors(c0, c1, p) {
       var f=parseInt(c0.slice(1),16),t=parseInt(c1.slice(1),16),R1=f>>16,G1=f>>8&0x00FF,B1=f&0x0000FF,R2=t>>16,G2=t>>8&0x00FF,B2=t&0x0000FF;
       return "#"+(0x1000000+(Math.round((R2-R1)*p)+R1)*0x10000+(Math.round((G2-G1)*p)+G1)*0x100+(Math.round((B2-B1)*p)+B1)).toString(16).slice(1);
     }
+    $("#loading").text("");
+  });
   </script>
 </head>
 
 <body>
-  <img id="jellyfish" src="img/jellyfish-icon.png">
+  <div id="jellyarea">
+  <span id="loading">LOADING</span>
+  <img id="jellyfishicon" src="img/jellyfish-icon-2.png" style="position: relative; top: 20px">
+  </div>
   <hr>
   <div id="debug">
   Latest message: <span id="message"></span><br>

@@ -1,5 +1,9 @@
-body {
+html,body {
 	text-align: center;
+	height: 100%;
+}
+
+body {
 	background-color: #080716;
 }
 
@@ -9,4 +13,9 @@ canvas {
 
 #debug {
 	text-align: left;
+}
+
+#jellyarea {
+	height: 100%;
+	min-height: 100%;
 }
