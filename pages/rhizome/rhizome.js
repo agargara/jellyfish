@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+// #!/usr/bin/env node
 /*
  * Copyright 2014-2015, Sébastien Piquemal <sebpiq@gmail.com>
  *

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/> <!--320-->
+<head>
+  <title>Jellyfish</title>
+  <script src='js/fastclick.js'></script>
+  <script src="rhizome/rhizome.js"></script>
+  <script src="js/jquery-2.1.0.min.js"></script>
+  <script src="js/jquery-ui.min.js"></script>
+  <script src="js/util.js"></script>
+  <link rel="stylesheet" type="text/css" href="jellyfish-overview.css" />
+  <link rel="icon" type="image/png" href="img/favicon-32x32.png" sizes="32x32">
+  <link rel="icon" type="image/png" href="img/favicon-96x96.png" sizes="96x96">
+  <link rel="icon" type="image/png" href="img/favicon-16x16.png" sizes="16x16">
+  <script>
+  $( document ).ready(function(){
+    // console.log = function(message) {$('#debug').append(message + '</br>');};
+    //console.error = console.debug = console.info =  console.log;
+    $("#debug").text("");
+    $("#footer").hide();
+    $("#ocean").hide();
+    var otherDrift; // interval for drifting jellyfish
+    var modes = ['long-tones','rising-fm','noise','drums', 'bubbles','broken-drums', 'loopy', 'one-note', 'the-end'];
+    var modeIndex = 4;
+    var previousMode = "";
+    var notStarted=true;
+    // Rhizome networking code
+    rhizome.start(function(err) {
+      if (err) {
+        $('body').html('client failed starting : ' + err)
+        throw err
+      }
+      $('#send').submit(function(event) {
+        event.preventDefault()
+        var address = $('#address').val()
+          , args = $('#args').val()
+        if (args.length)
+          args = args.split(' ').map(function(arg) { return JSON.parse(arg) })
+        else args = []
+        rhizome.send(address, args);
+      })
+      // Make a unique ID based on rhizome id.
+      myId = rhizome.id;
+      // We want to receive all the messages, so we subscribe to '/'
+      rhizome.send('/sys/subscribe', ['/']);
+    });
+
+    var userList = {}; // keep track of connected users.
+    // handle messages
+    rhizome.on('message', function(address, args) {
+      $("#message").html(address + ", " + args);
+      switch (address) {
+        case '/everyone/freq':
+          myFreq = args[0];
+          break;
+        case '/play/freqs':
+          //
+          break;
+        case '/sys/connections//':
+          break;
+        case '/addPlayer':
+          userList[args] = true;
+          var userStrings = [];
+          for (var user in userList){
+            userStrings.push(user.substring(0,4));
+          }
+          $("#other-jellyfish").text("");
+          for (i=0; i<(userStrings.length); i++){
+            // Add one jellyfish in the background per user
+            $("#other-jellyfish").append("<img class='other' src='img/jellyfish-icon-straight.png'>");
+          }
+          var animateJellyfish = function(){
+            var height = $(document).height();
+            var width = $(document).width();
+            $(".other").each(function(){
+              $(this).animate({
+                top: (Math.random()*90)+"%",
+                left: (Math.random()*90)+"%",
+              },4000);
+            });
+          }
+          animateJellyfish();
+          clearInterval(otherDrift);
+          otherDrift = setInterval(animateJellyfish, 4000);
+          break;
+        case '/mode':
+          var modeName = args[0];
+          switch(modeName){
+            case 'long-tones': modeIndex=0; break;
+            case 'rising-fm': modeIndex=1; break;
+            case 'noise': modeIndex=2; break;
+            case 'drums': modeIndex=3; break;
+            case 'bubbles': modeIndex=4; break;
+            case 'broken-drums': modeIndex=5; break;
+            case 'loopy': modeIndex=6; break;
+            case 'one-note': modeIndex=7; break;
+            case 'the-end': modeIndex=8; break;
+          }
+          switchModes(modes[modeIndex]);
+          $("#footer").show();
+          break;  
+        case '/set/freqs':
+          //
+          break;
+        case '/global/gain':
+          //
+          break;
+        default: 
+          console.log(address + " ::: " + args);
+      }
+    });
+
+    function switchModes (mode){
+      if(notStarted){
+        setTimeout(function(){
+          $("#instructions").animate({
+            top: "128px",
+            "font-size": "3em"
+          },2000);
+        },2000);
+        notStarted=false;
+      }
+      if(mode != previousMode){
+      switch (mode) {
+        case 'long-tones':
+          // change instructions
+          console.log("CHANGING INSTRUCTIONS");
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            console.log("CHANGING INSTRUCTIONS 4REALZ");
+            $("#instructions").text("press and hold, move finger... repeat")
+          }).animate({
+            opacity: "1",
+            color: "black"
+          },2000);
+          $('body').animate({
+            backgroundColor: "#46459F"
+          }, 100);
+          break;
+        case 'rising-fm':
+          // change instructions
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            $("#instructions").html("tap quickly to rise<br>tap slowly to descend")
+          }).animate({
+            opacity: "1",
+            color: "white"
+          },2000);
+          $('body').animate({
+            backgroundColor: "#26256F"
+          }); 
+          break;
+        case 'noise':
+          // change instructions
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            $("#instructions").html("tap rhythmically<br>move finger while pressing")
+          }).animate({
+            opacity: "1",
+            color: "black"
+          },2000);
+          $('body').animate({
+            backgroundColor: "#6F2525"
+          }, 100);
+          break;
+        case 'drums':
+          // change instructions
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            $("#instructions").text("tap rhythmically")
+          }).animate({
+            opacity: "1",
+            color: "black"
+          },2000);
+          $('body').animate({
+            backgroundColor: "#65C44F"
+          }, 100);
+          break;
+        case 'bubbles':
+          // change instructions
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            $("#instructions").text("press, hold, move finger")
+          }).animate({
+            opacity: "1",
+            color: "black",
+          },2000);
+          $('body').animate({
+            backgroundColor: "#BCABE3"
+          }, 100);
+          break;
+        case 'broken-drums':
+          // change instructions
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            $("#instructions").text("tap whenever you like")
+          }).animate({
+            opacity: "1",
+            color: "black"
+          },2000);
+          $('body').animate({
+            backgroundColor: "#6DCB62"
+          }, 100);
+          break;
+        case 'loopy':
+          // change instructions
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            $("#instructions").text("press and move finger to change sound")
+          }).animate({
+            opacity: "1",
+            color: "black"
+          },2000);
+          $('body').animate({
+            backgroundColor: "#4998DC"
+          }, 100);
+          break;
+        case 'one-note':
+          // fade out loopy
+          fadingLoopy = true;
+          fadingInOneNote = true;
+          $("#ocean").hide();
+          // change instructions
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            $("#instructions").text("press and move finger to change sound");
+          }).animate({
+            opacity: "1",
+            color: "white"
+          },2000);
+          $('body').animate({
+            backgroundColor: "#000"
+          }, 5000);
+          break;
+        case 'the-end':
+          $("#ocean").hide();
+          // change instructions
+          $("#instructions").animate({
+            opacity: "0"
+          },2000,function(){
+            $("#instructions").html("終<br>end");
+          }).animate({
+            opacity: "1",
+            color: "white",
+          },2000);
+          $('#jellyfishfishicon').attr('src', "img/jellyfish-icon-white.png");
+          $("#jellyfishicon").animate({
+            opacity: "0.15"
+          });
+          $('body').animate({
+            backgroundColor: "#000"
+          }, 5000);
+          break;
+      }
+      }
+      previousMode = mode;
+    }
+
+    rhizome.on('connected', function() {
+      console.log('connected!')
+      // Get user IDs.
+      rhizome.send('/getPlayers', ['/']);
+    });
+
+    rhizome.on('connection lost', function() {
+      console.log('connection lost!')
+    });
+
+    rhizome.on('queued', function() {
+      console.log('queued!')
+    });
+  });
+  </script>
+</head>
+
+<body>
+  <div id="jellyarea">
+  <span id="debug"></span>
+  <div id="instructions">Please visit
+    <h1>http://jellyfish.website</h1>
+    on a smartphone or other device with Chrome, Safari or Firefox. Make sure to include "http://".<br>
+    Unmute and turn up your sound!<br>
+    <br>
+    <div id="smaller">Note: If you are connected to the Mills "Guest" wireless network, use this address instead: <h2>http://192.168.0.84:8000</h2>
+      <br>
+    Jellyfish might not function completely on some browsers. If you are unable to connect, please share with a neighbor or just sit back and enjoy the music!</div>
+  </div>
+  <div id="footer">http://jellyfish.website<br>
+    (or http://192.168.0.84:8000 on Guest wireless)</div>
+  <div id="jellycontainer">
+  </div>
+  <div id="other-jellyfish"></div>
+  <div id="ocean"></div>
+  </div>
+</body>
+
+</html>

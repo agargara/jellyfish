@@ -1,0 +1,34 @@
+<html>
+<head>
+    <script>
+        function beep(){
+            var context = new (window.AudioContext || window.webkitAudioContext);
+            var osc = context.createOscillator();
+            var gainNode = context.createGain();
+            var now = context.currentTime;
+            osc.type = 'sine';
+            osc.frequency.value = 330;
+            osc.connect(gainNode);
+            gainNode.connect(context.destination);
+            gainNode.gain.value = 0.0;
+            gainNode.gain.setValueAtTime(0.0, now);
+            gainNode.gain.linearRampToValueAtTime(1.0, now + 1);
+            gainNode.gain.linearRampToValueAtTime(0.0 , now + 2);
+            osc.start(now);
+            osc.stop(now + 2);
+        }
+        function Foo(){
+            this.confusing = 'hell yeah';
+
+            this.changeConfusing = function(){
+                this.confusing='nope';
+            }
+        }
+        var myObject = new Foo();
+        console.log(myObject.confusing);
+        myObject.changeConfusing();
+        console.log(myObject.confusing);
+    </script>
+</head>
+<button onclick="beep()">Beep</button>
+</html>

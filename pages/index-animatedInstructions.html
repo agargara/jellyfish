@@ -10,14 +10,15 @@
   <script src="js/jquery-ui.min.js"></script>
   <script src="js/util.js"></script>
   <script src="js/synths.js"></script>
+  <script src="js/WAAClock.js"></script>
   <link rel="stylesheet" type="text/css" href="jellyfish.css" />
   <link rel="icon" type="image/png" href="img/favicon-32x32.png" sizes="32x32">
   <link rel="icon" type="image/png" href="img/favicon-96x96.png" sizes="96x96">
   <link rel="icon" type="image/png" href="img/favicon-16x16.png" sizes="16x16">
   <script>
   $( document ).ready(function(){
-    console.log = function(message) {$('#debug').append(message + '</br>');};
-    console.error = console.debug = console.info =  console.log;
+    // console.log = function(message) {$('#debug').append(message + '</br>');};
+    // console.error = console.debug = console.info =  console.log;
     $("#debug").text("");
     $("#ocean").hide();
     $("#instructions").css("opacity", "0");
@@ -25,15 +26,18 @@
       FastClick.attach(document.body);
     });
     var context = new AudioContext();
+    var clock = new WAAClock(context);
+    clock.start();
     var isMouseDown = false;
     var touchedElement = null;
     var hasStarted = false;
     var myId;
+    var imgChangeTimeout;
+    var imgPosResetTimeout;
     var modes = ['long-tones','rising-fm','noise','drums', 'bubbles','broken-drums', 'loopy', 'one-note', 'the-end'];
     var modeIndex = 4;
     var timesPressed = 0;
-    previousMode = "";
-    //switchModes(modes[modeIndex]);
+    switchModes(modes[modeIndex]);
     var freqs = [];
     var loopyFreqs;
     var loopyDurs;
@@ -87,7 +91,6 @@
     var bubbleEvent = null;
     var bubbleAnimation = null;
     var bubbleAnimationRate = 200;
-    var bubblesPlaying = false;
     var loopyTimeout = null;
     var loopyAnimation = null;
     var oneNoteTimeout = null;
@@ -129,9 +132,7 @@
       if(hasStarted){
         switch (modes[modeIndex]) {
           case 'long-tones':
-            if(freqs.length>=1){
-              longTones();
-            }
+            longTones();
             break;
           case 'rising-fm':
             risingFM();
@@ -205,7 +206,7 @@
       )*50);
       // X: 0 to screenWidth -> loopy env release
       if(loopyEnvelope != null){
-        loopyEnvelope.releaseTime = (((touch.pageX/$(window).width()))*0.3)+0.01;
+        loopyEnvelope.releaseTime = (((touch.pageX/$(window).width()))*1)+0.01;
       }
     });
 
@@ -223,9 +224,6 @@
         // reswitch modes
         switchModes(modes[modeIndex]);
       }else{
-        if(modes[modeIndex]!='one-note'){
-          $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
-        }
         padOff();
         noiseOff();
         bubblesOff();
@@ -234,7 +232,17 @@
 
     // make the default pads in the background
     var padFreqs;
+    if(freqs.length >= 10){
+      padFreqs = freqs.slice(5,10);
+    }else{
+      padFreqs = [];
+    }
     var padVCA = new VCA(context);
+    for (var i=0; i<padFreqs.length; i++){
+      pads.push(new VCO(context, 'sawtooth', padFreqs[i], 1));
+      pads[i].connect(padVCA);
+      pads[i].oscillator.start(context.currentTime);
+    };
     padEnv = new AR_EnvelopeGenerator(context,0.07);
     padEnv.attackTime=1;
     padEnv.releaseTime=4;
@@ -269,15 +277,6 @@
       switch (address) {
         case '/'+myId+'/freq':
           myFreq = args[0];
-          if(oneNoteOsc != null){
-            oneNoteOsc.setFrequency(myFreq);
-          }
-          break;
-        case '/everyone/freq':
-          myFreq = args[0];
-          if(oneNoteOsc != null){
-            oneNoteOsc.setFrequency(myFreq);
-          }
           break;
         case '/global/gain':
           globalGain.gain.value = args[0];
@@ -306,17 +305,8 @@
           }, 2200);
           freqs = args;
           resetLoopyFreqs();
-          // clear old pads
-          for(var i=0; i<pads.length; i++){
-            pads[i].oscillator.stop(context.currentTime);
-            pads[i] = null;
-          }
-          // make new pads
-          pads = [];
-          for (var i=0; i<freqs.length; i++){
-            pads.push(new VCO(context, 'sawtooth', freqs[i], 1));
-            pads[i].connect(padVCA);
-            pads[i].oscillator.start(context.currentTime);
+          for (var i=0; i<pads.length; i++){
+            pads[i].setFrequency(freqs[i]);
           };
           padEnv.trigger();
           break;
@@ -361,7 +351,6 @@
     });
 
     function switchModes (mode){
-      if(mode != previousMode){
       if(mode!='one-note'){
         loopOff();
       }
@@ -375,11 +364,11 @@
           $("#instructions").animate({
             opacity: "0"
           },2000,function(){
-            $("#instructions").text("press and hold, move finger... repeat")
-          }).animate({
-            opacity: "1",
-            color: "black"
-          },2000);
+            $("#instructions").animate({
+              opacity: "1",
+              color: "black"
+            },2000).text("press and hold, move finger... repeat")
+          });
           $('body').animate({
             backgroundColor: "#46459F"
           }, 100);
@@ -389,11 +378,11 @@
           $("#instructions").animate({
             opacity: "0"
           },2000,function(){
-            $("#instructions").html("tap quickly to rise<br>tap slowly to descend")
-          }).animate({
-            opacity: "1",
-            color: "white"
-          },2000);
+            $("#instructions").animate({
+              opacity: "1",
+              color: "white"
+            },2000).html("tap quickly to rise<br>tap slowly to descend")
+          });
           driftDown = setInterval(function(){ 
             // jellyfish always goin' down...
             if((Date.now() - lastClick > 250)){
@@ -403,7 +392,7 @@
              };
              $('body').animate({
                 backgroundColor: shadeColor("#26256F",linlin(
-                 freqIndex, 0, freqs.length, -0.8, 0.6)),
+                 freqIndex, 0, freqs.length-1, -0.8, 0.6)),
               }, 500);
            };
           }, 500);
@@ -413,7 +402,7 @@
           $("#instructions").animate({
             opacity: "0"
           },2000,function(){
-            $("#instructions").html("tap rhythmically<br>move finger while pressing")
+            $("#instructions").text("rhythmically: press and hold, move finger...repeat")
           }).animate({
             opacity: "1",
             color: "black"
@@ -517,13 +506,12 @@
           $("#jellyfishicon").animate({
             opacity: "0.15"
           });
+          clearInterval(driftDown);
           $('body').animate({
             backgroundColor: "#111"
           }, 1000);
           break;
       }
-      }
-      previousMode = mode;
     }
 
     // Maps linear range to another linear range, with clipping
@@ -562,17 +550,15 @@
       }
       // make new synth, envelope on random freq from freqs
       var theFreq = freqs[freqIndexArray[currentIndex]];
+      // If the urn is empty, reshuffle it 
       currentIndex++;
-      // If the urn is empty, reshuffle
       if(currentIndex >= freqIndexArray.length){
+        // Reshuffle until there are no repeats
+        do{
+          freqIndexArray = shuffleArray(freqIndexArray);
+        }while(freqIndexArray[0] == lastIndex)
+        lastIndex = freqIndexArray[freqIndexArray.length-1];
         currentIndex = 0;
-        // Reshuffle until there are no repeats unless array size is 1
-        if(freqIndexArray.length > 1){
-          do{
-            freqIndexArray = shuffleArray(freqIndexArray);
-          }while(freqIndexArray[0] == lastIndex);
-          lastIndex = freqIndexArray[freqIndexArray.length-1];
-        }
       }
       var myVCO = new VCO(context, 'sawtooth', theFreq, 0.5);
       currentStaticVCO = myVCO;
@@ -599,6 +585,9 @@
     }
     function padOff(){
       if(currentStaticEnv != null){
+        if(modes[modeIndex]!='one-note'){
+          $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
+        }
         currentStaticEnv.release();
         if(currentStaticVCO!= null){
           currentStaticVCO.oscillator.stop(
@@ -614,14 +603,20 @@
       lastClick = Date.now();
       // change img
       $('#jellyfishicon').attr('src', "img/jellyfish-icon-swimming.png");
+      clearTimeout(imgChangeTimeout);
+      clearTimeout(imgPosResetTimeout);
+      imgChangeTimeout = setTimeout(function(){
+        $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
+      }, 100);
       // animate img
       $( "#jellyfishicon" ).animate({
         top: "-=10",
-      }, 80, function(){
+      }, 80);
+      imgPosResetTimeout = setTimeout(function(){
         $( "#jellyfishicon" ).animate({
           top: "10px",
-        }, 80).attr('src', "img/jellyfish-icon-straight.png");
-      });
+        }, 80);
+      }, 20);
       if (speed < 280){ // fast press
         freqIndex = freqIndex + 1;
       }else if (speed > 500){ // slow press
@@ -713,7 +708,6 @@
       bubbleSine.setFrequency(bubbleFreq);
       bubbleSine.setGain(0.7);
       bubbleSine.oscillator.start(context.currentTime);
-      bubblesPlaying = true;
       // if(bubbleEvent != null){
       //  bubbleEvent.clear();
       // }
@@ -767,10 +761,8 @@
       } 
     }
     function bubblesOff(){
-      if(bubbling){
-        $("#jellyfishicon").stop(true);
-      }
       bubbling = false;
+      $("#jellyfishicon").stop(true);
       //$("#jellyfishicon").animate({left: "0"},400);
       
       clearTimeout(bubbleEvent);
@@ -781,9 +773,8 @@
 
     function fadeBubbles(){
       if(bubbleSine!=null){
-        if ((bubbleSine.gain.gain.value <= 0) && bubblesPlaying){
+        if (bubbleSine.gain.gain.value <= 0){
           bubbleSine.oscillator.stop(context.currentTime);
-          bubblesPlaying = false;
         }else{
           // cancel scheduled values...
           bubbleSine.gain.gain.cancelScheduledValues(context.currentTime);
@@ -827,14 +818,20 @@
         playSound.start(0);
         // animate
         $('#jellyfishicon').attr('src', "img/jellyfish-icon-swimming.png");
+        clearTimeout(imgChangeTimeout);
+        clearTimeout(imgPosResetTimeout);
+        imgChangeTimeout = setTimeout(function(){
+          $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
+        }, 100);
         // animate img
         $( "#jellyfishicon" ).animate({
           top: "-=10",
-        }, 80, function(){
+        }, 80);
+        imgPosResetTimeout = setTimeout(function(){
           $( "#jellyfishicon" ).animate({
             top: "10px",
-          }, 80).attr('src', "img/jellyfish-icon-straight.png");
-        });
+          }, 80);
+        }, 20);
         timesPressed = (timesPressed + 1)%16;
       }
     }
@@ -855,6 +852,7 @@
         }else{
             rate = (0.001+(Math.random()*0.5));
         }
+        console.log(rate);
         playSound.playbackRate.value = (rate); // random playback rate
         var drumsGainNode = context.createGain();
         drumsGainNode.gain.value = 3;
@@ -863,14 +861,20 @@
         playSound.start(0);
         // animate
         $('#jellyfishicon').attr('src', "img/jellyfish-icon-swimming.png");
+        clearTimeout(imgChangeTimeout);
+        clearTimeout(imgPosResetTimeout);
+        imgChangeTimeout = setTimeout(function(){
+          $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
+        }, 100);
         // animate img
         $( "#jellyfishicon" ).animate({
           top: "-=10",
-        }, 80, function(){
+        }, 80);
+        imgPosResetTimeout = setTimeout(function(){
           $( "#jellyfishicon" ).animate({
             top: "10px",
-          }, 80).attr('src', "img/jellyfish-icon-straight.png");
-        });
+          }, 80);
+        }, 20);
       }
     }
 
@@ -953,12 +957,6 @@
     }
 
     function resetLoopyFreqs(){
-      freqIndexArray = [];
-      for(i=0; i<freqs.length; i++){
-        freqIndexArray[i] = i;
-      }
-      freqIndexArray = shuffleArray(freqIndexArray);
-      lastIndex = freqIndexArray[freqIndexArray.length-1];
       if(loopySaw != null){
         if(Math.random()>0.5){
           loopySaw.oscillator.type = 'square';

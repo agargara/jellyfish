@@ -10,43 +10,39 @@
   <script src="js/jquery-ui.min.js"></script>
   <script src="js/util.js"></script>
   <script src="js/synths.js"></script>
+  <script src="js/WAAClock.js"></script>
   <link rel="stylesheet" type="text/css" href="jellyfish.css" />
   <link rel="icon" type="image/png" href="img/favicon-32x32.png" sizes="32x32">
   <link rel="icon" type="image/png" href="img/favicon-96x96.png" sizes="96x96">
   <link rel="icon" type="image/png" href="img/favicon-16x16.png" sizes="16x16">
   <script>
   $( document ).ready(function(){
-    console.log = function(message) {$('#debug').append(message + '</br>');};
-    console.error = console.debug = console.info =  console.log;
+    // console.log = function(message) {$('#debug').append(message + '</br>');};
+    // console.error = console.debug = console.info =  console.log;
     $("#debug").text("");
-    $("#ocean").hide();
-    $("#instructions").css("opacity", "0");
     $(function() {
       FastClick.attach(document.body);
     });
     var context = new AudioContext();
+    var clock = new WAAClock(context);
+    clock.start();
     var isMouseDown = false;
     var touchedElement = null;
     var hasStarted = false;
     var myId;
-    var modes = ['long-tones','rising-fm','noise','drums', 'bubbles','broken-drums', 'loopy', 'one-note', 'the-end'];
+    var imgChangeTimeout;
+    var imgPosResetTimeout;
+    var modes = ['long-tones','rising-fm','noise','drums', 'bubbles','one-note'];
     var modeIndex = 4;
     var timesPressed = 0;
-    previousMode = "";
-    //switchModes(modes[modeIndex]);
-    var freqs = [];
-    var loopyFreqs;
-    var loopyDurs;
-    var loopyTotalDur;
-    resetLoopyFreqs();
+    switchModes(modes[modeIndex]);
+    var freqs = [130.8127826503, 146.8323839587, 155.56349186104, 174.6141157165, 195.99771799087, 207.65234878997, 233.08188075904, 261.6255653006, 293.66476791741, 311.12698372208, 349.228231433, 391.99543598175, 415.30469757995, 466.16376151809, 587.32953583482 ];
     // Global vars for longTones / oneNote
-    var globalGain = context.createGain();
-    globalGain.connect(context.destination);
     var biquadFilter = context.createBiquadFilter();
     biquadFilter.type = "lowpass";
     biquadFilter.frequency.value = 1000;
     biquadFilter.Q.value = 10;
-    var myFreq = 0;
+    var myFreq = 174.61;
     var currentIndex = 0;
     var freqIndexArray = [];
     for(i=0; i<freqs.length; i++){
@@ -66,12 +62,6 @@
     var bubbleFreq;
     var bubbleRate = 1.01;
     var bubbleFreqOffset = 0;
-    var loopySaw;
-    var loopyEnvelope = null;
-    var fadingLoopy = false;
-    var fadingInOneNote = true;
-    var oneNoteOsc = null;
-    var oneNoteGainChange = 0.00001;
     var distortion = new Distortion(context);
 
     //pinkNoise.connect(distortion);
@@ -86,11 +76,7 @@
     var bubbleFade = null;
     var bubbleEvent = null;
     var bubbleAnimation = null;
-    var bubbleAnimationRate = 200;
-    var bubblesPlaying = false;
-    var loopyTimeout = null;
-    var loopyAnimation = null;
-    var oneNoteTimeout = null;
+    var bubbleAnimationRate = 60;
     // Get sound files
     var soundBuffers = new Array(); // Buffer for files
     var myXMLrequests = new Array();
@@ -114,6 +100,7 @@
       })(i);
     }
 
+
     // Initialize jRumble on jellyfish
     $('#jellyfishicon').jrumble({
       x: 10,
@@ -121,17 +108,13 @@
       rotation: 4,
       speed: 0
     });
-    var rumbling = false;
-
     $("#jellyarea").on('touchstart mousedown',function(e) {
       e.preventDefault();
       isMouseDown = true;
       if(hasStarted){
         switch (modes[modeIndex]) {
           case 'long-tones':
-            if(freqs.length>=1){
-              longTones();
-            }
+            longTones();
             break;
           case 'rising-fm':
             risingFM();
@@ -145,17 +128,8 @@
           case 'bubbles':
             bubblesOn();
             break;
-          case 'broken-drums':
-            brokenDrums();
-            break;
-          case 'loopy':
-            //
-            break;
           case 'one-note':
-            //
-            break;
-          case 'the-end':
-            // @TODO Easter Egg?
+            oneNote();
             break;
         }
       }
@@ -174,15 +148,10 @@
         // X: 0 to screenWidth -> freq offset -1000 to 100
         bubbleFreqOffset = (((e.pageX/$(window).width()))*1100)-1000;
         // X+Y: 0 to screenHeight+screenWidth -> bubbleAnimationRate
-        bubbleAnimationRate = 100+((
+        bubbleAnimationRate = 50+((
           (1-(e.pageX/$(window).width())+
           (e.pageY/$(window).height()))
         )*50);
-
-        // X: 0 to screenWidth -> loopy env release
-        if(loopyEnvelope != null){
-          loopyEnvelope.releaseTime = (((e.pageX/$(window).width()))*0.3)+0.01;
-        }
       }
     });
 
@@ -199,14 +168,10 @@
       // X: 0 to screenWidth -> freq offset -1000 to 100
       bubbleFreqOffset = (((touch.pageX/$(window).width()))*1100)-1000;
       // X+Y: 0 to screenHeight+screenWidth -> bubbleAnimationRate
-      bubbleAnimationRate = 100+((
+      bubbleAnimationRate = 5+((
         (1-(touch.pageX/$(window).width())+
         (touch.pageY/$(window).height()))
       )*50);
-      // X: 0 to screenWidth -> loopy env release
-      if(loopyEnvelope != null){
-        loopyEnvelope.releaseTime = (((touch.pageX/$(window).width()))*0.3)+0.01;
-      }
     });
 
     $("#jellyarea").on('touchend mouseup touchcancel touchleave',function(e) {
@@ -220,26 +185,34 @@
         oscFix.start();
         oscFix.stop();
         hasStarted = true;
-        // reswitch modes
-        switchModes(modes[modeIndex]);
       }else{
-        if(modes[modeIndex]!='one-note'){
-          $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
-        }
         padOff();
         noiseOff();
         bubblesOff();
       }
     });
 
+    // Button events
+    $(modeChangeButton).on('touchend mouseup touchcancel touchleave',function(e){
+      e.preventDefault();
+      modeIndex = (modeIndex+1) % (modes.length-1); // leave out oneNote for now
+      switchModes(modes[modeIndex]);
+
+    })
+
     // make the default pads in the background
-    var padFreqs;
+    var padFreqs = freqs.slice(5,10);
     var padVCA = new VCA(context);
+    for (var i=0; i<5; i++){
+      pads.push(new VCO(context, 'sawtooth', padFreqs[i], 1));
+      pads[i].connect(padVCA);
+      pads[i].oscillator.start(context.currentTime);
+    };
     padEnv = new AR_EnvelopeGenerator(context,0.07);
     padEnv.attackTime=1;
     padEnv.releaseTime=4;
     padEnv.connect(padVCA.amplitude);
-    padVCA.connect(globalGain);
+    padVCA.connect(context.destination);
 
     // Rhizome networking code
     rhizome.start(function(err) {
@@ -269,18 +242,6 @@
       switch (address) {
         case '/'+myId+'/freq':
           myFreq = args[0];
-          if(oneNoteOsc != null){
-            oneNoteOsc.setFrequency(myFreq);
-          }
-          break;
-        case '/everyone/freq':
-          myFreq = args[0];
-          if(oneNoteOsc != null){
-            oneNoteOsc.setFrequency(myFreq);
-          }
-          break;
-        case '/global/gain':
-          globalGain.gain.value = args[0];
           break;
         case '/sys/connections//':
           break;
@@ -294,10 +255,9 @@
             userStrings.push(user.substring(0,4));
           }
           break;
-        case '/play/freqs':
+        case '/freqs':
           // animate ocean
           // animate img
-          $("#ocean").show();
           $( "#ocean" ).animate({
             top: "300px",
           }, 1800);
@@ -305,24 +265,11 @@
             top: "500px",
           }, 2200);
           freqs = args;
-          resetLoopyFreqs();
-          // clear old pads
-          for(var i=0; i<pads.length; i++){
-            pads[i].oscillator.stop(context.currentTime);
-            pads[i] = null;
-          }
-          // make new pads
-          pads = [];
-          for (var i=0; i<freqs.length; i++){
-            pads.push(new VCO(context, 'sawtooth', freqs[i], 1));
-            pads[i].connect(padVCA);
-            pads[i].oscillator.start(context.currentTime);
+          var padFreqs = freqs.slice(5,10);
+          for (var i=0; i<pads.length; i++){
+            pads[i].setFrequency(padFreqs[i]);
           };
           padEnv.trigger();
-          break;
-        case '/set/freqs':
-          freqs = args;
-          resetLoopyFreqs();
           break;
         case '/mode':
           var modeName = args[0];
@@ -331,18 +278,11 @@
             case 'rising-fm': modeIndex=1; break;
             case 'noise': modeIndex=2; break;
             case 'drums': modeIndex=3; break;
-            case 'bubbles': modeIndex=4; break;
-            case 'broken-drums': modeIndex=5; break;
-            case 'loopy': modeIndex=6; break;
-            case 'one-note': modeIndex=7; break;
-            case 'the-end': modeIndex=8; break;
           }
           switchModes(modes[modeIndex]);
           break;
         default: 
-          if(address.substr(-5) != "/freq"){
-            console.log(address + " ::: " + args);
-          };
+          console.log(address + " ::: " + args);
       }
     });
 
@@ -361,39 +301,21 @@
     });
 
     function switchModes (mode){
-      if(mode != previousMode){
-      if(mode!='one-note'){
-        loopOff();
-      }
-      oneNoteOff();
-      if(driftDown != null){
-        clearInterval(driftDown);
-      }
       switch (mode) {
         case 'long-tones':
           // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").text("press and hold, move finger... repeat")
-          }).animate({
-            opacity: "1",
-            color: "black"
-          },2000);
+          $("#instructions").text("press, hold, move finger");
+          $("#instructions").css("color", "black");
+          clearInterval(driftDown);
           $('body').animate({
             backgroundColor: "#46459F"
           }, 100);
           break;
         case 'rising-fm':
           // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").html("tap quickly to rise<br>tap slowly to descend")
-          }).animate({
-            opacity: "1",
-            color: "white"
-          },2000);
+          $("#instructions").text("tap repeatedly");
+          $("#instructions").css("color", "white");
+          clearInterval(driftDown);
           driftDown = setInterval(function(){ 
             // jellyfish always goin' down...
             if((Date.now() - lastClick > 250)){
@@ -403,127 +325,39 @@
              };
              $('body').animate({
                 backgroundColor: shadeColor("#26256F",linlin(
-                 freqIndex, 0, freqs.length, -0.8, 0.6)),
+                 freqIndex, 0, freqs.length-1, -0.8, 0.6)),
               }, 500);
            };
           }, 500);
           break;
         case 'noise':
           // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").html("tap rhythmically<br>move finger while pressing")
-          }).animate({
-            opacity: "1",
-            color: "black"
-          },2000);
+          $("#instructions").text("press, hold, move finger");
+          $("#instructions").css("color", "black");
+          clearInterval(driftDown);
           $('body').animate({
             backgroundColor: "#6F2525"
           }, 100);
           break;
         case 'drums':
           // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").text("tap rhythmically")
-          }).animate({
-            opacity: "1",
-            color: "black"
-          },2000);
+          $("#instructions").text("tap rhythmically");
+          $("#instructions").css("color", "black");
+          clearInterval(driftDown);
           $('body').animate({
             backgroundColor: "#65C44F"
           }, 100);
           break;
         case 'bubbles':
           // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").text("press, hold, move finger")
-          }).animate({
-            opacity: "1",
-            color: "black"
-          },2000);
+          $("#instructions").text("press, hold, move finger");
+          $("#instructions").css("color", "black");
+          clearInterval(driftDown);
           $('body').animate({
             backgroundColor: "#BCABE3"
           }, 100);
           break;
-        case 'broken-drums':
-          // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").text("tap whenever you like")
-          }).animate({
-            opacity: "1",
-            color: "black"
-          },2000);
-          $('body').animate({
-            backgroundColor: "#6DCB62"
-          }, 100);
-          break;
-        case 'loopy':
-          // start loop
-          loopy();
-          // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").text("press and move finger to change sound")
-          }).animate({
-            opacity: "1",
-            color: "black"
-          },2000);
-          $('body').animate({
-            backgroundColor: "#4998DC"
-          }, 100);
-          break;
-        case 'one-note':
-          // fade out loopy
-          fadingLoopy = true;
-          fadingInOneNote = true;
-          // start note
-          oneNote();
-          $("#ocean").hide();
-          // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").text("press and move finger to change sound");
-          }).animate({
-            opacity: "1",
-            color: "white"
-          },2000);
-          $('body').animate({
-            backgroundColor: "#000"
-          }, 5000);
-          break;
-        case 'the-end':
-          $("#ocean").hide();
-          // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").html("終<br>end");
-          }).animate({
-            opacity: "1",
-            color: "white",
-            top: "25%",
-            "font-size": "4em",
-          },2000);
-          $('#jellyfishicon').attr('src', "img/jellyfish-icon-white.png");
-          $("#jellyfishicon").animate({
-            opacity: "0.15"
-          });
-          $('body').animate({
-            backgroundColor: "#111"
-          }, 1000);
-          break;
       }
-      }
-      previousMode = mode;
     }
 
     // Maps linear range to another linear range, with clipping
@@ -562,17 +396,15 @@
       }
       // make new synth, envelope on random freq from freqs
       var theFreq = freqs[freqIndexArray[currentIndex]];
+      // If the urn is empty, reshuffle it 
       currentIndex++;
-      // If the urn is empty, reshuffle
       if(currentIndex >= freqIndexArray.length){
+        // Reshuffle until there are no repeats
+        do{
+          freqIndexArray = shuffleArray(freqIndexArray);
+        }while(freqIndexArray[0] == lastIndex)
+        lastIndex = freqIndexArray[freqIndexArray.length-1];
         currentIndex = 0;
-        // Reshuffle until there are no repeats unless array size is 1
-        if(freqIndexArray.length > 1){
-          do{
-            freqIndexArray = shuffleArray(freqIndexArray);
-          }while(freqIndexArray[0] == lastIndex);
-          lastIndex = freqIndexArray[freqIndexArray.length-1];
-        }
       }
       var myVCO = new VCO(context, 'sawtooth', theFreq, 0.5);
       currentStaticVCO = myVCO;
@@ -592,13 +424,14 @@
       // connect envelope to filter
       myEnv.connect(biquadFilter);
       // connect filter to output
-      biquadFilter.connect(globalGain);
+      biquadFilter.connect(context.destination);
 
       myVCO.oscillator.start(context.currentTime);      
       myEnv.trigger();
     }
     function padOff(){
       if(currentStaticEnv != null){
+        $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
         currentStaticEnv.release();
         if(currentStaticVCO!= null){
           currentStaticVCO.oscillator.stop(
@@ -614,14 +447,20 @@
       lastClick = Date.now();
       // change img
       $('#jellyfishicon').attr('src', "img/jellyfish-icon-swimming.png");
+      clearTimeout(imgChangeTimeout);
+      clearTimeout(imgPosResetTimeout);
+      imgChangeTimeout = setTimeout(function(){
+        $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
+      }, 100);
       // animate img
       $( "#jellyfishicon" ).animate({
         top: "-=10",
-      }, 80, function(){
+      }, 80);
+      imgPosResetTimeout = setTimeout(function(){
         $( "#jellyfishicon" ).animate({
           top: "10px",
-        }, 80).attr('src', "img/jellyfish-icon-straight.png");
-      });
+        }, 80);
+      }, 20);
       if (speed < 280){ // fast press
         freqIndex = freqIndex + 1;
       }else if (speed > 500){ // slow press
@@ -655,7 +494,7 @@
       envelope.releaseTime=rls;
       envelope.connect(vca.amplitude);
       // connect VCA to output
-      vca.connect(globalGain);
+      vca.connect(context.destination);
       vco.oscillator.start(context.currentTime);
       vco.oscillator.stop(context.currentTime+atk+rls);
       mod.oscillator.start(context.currentTime);
@@ -689,19 +528,15 @@
       // connect noise to filter
       whiteNoise.connect(biquadFilter);
       // connect filter to output
-      biquadFilter.connect(globalGain);
+      biquadFilter.connect(context.destination);
       $("#jellyfishicon").trigger('startRumble');
-      rumbling = true;
     }
     function noiseOff(){
       if(whiteNoise!=null){
         whiteNoise.disconnect();
         whiteNoise = null;
       }
-      if(rumbling){
-        $("#jellyfishicon").trigger('stopRumble');
-        rumbling = false;
-      }
+      $("#jellyfishicon").trigger('stopRumble');
     }
     function bubblesOn(){
       // Stop if already playing:
@@ -713,7 +548,6 @@
       bubbleSine.setFrequency(bubbleFreq);
       bubbleSine.setGain(0.7);
       bubbleSine.oscillator.start(context.currentTime);
-      bubblesPlaying = true;
       // if(bubbleEvent != null){
       //  bubbleEvent.clear();
       // }
@@ -721,19 +555,18 @@
       clearTimeout(bubbleAnimation);
       processBubbles();
       animateBubbles();
-      bubbleSine.connect(globalGain);
+      bubbleSine.connect(context.destination);
       bubbling=true;
       jellyGoRight();
     }
 
 
     function animateBubbles(){
-      var bbl = $("<img class='bubbleimg' src='img/bubble.png' style='top: 100%; left: "+(Math.random()*100)+"%'>");
-      bbl.appendTo($("#jellycontainer"));
-      bbl.animate({
+      $("#jellycontainer").append("<img class='bubbleimg' src='img/bubble.png' style='top: 100%; left: "+(Math.random()*100)+"%'>");
+      $( ".bubbleimg" ).animate({
           top: "-20",
         }, 800+(bubbleAnimationRate*4),"linear",function(){$(this).remove()});
-      bubbleAnimation = setTimeout(animateBubbles,bubbleAnimationRate*4);
+      bubbleAnimation = setTimeout(animateBubbles,bubbleAnimationRate);
     }
 
     function processBubbles(){
@@ -767,10 +600,8 @@
       } 
     }
     function bubblesOff(){
-      if(bubbling){
-        $("#jellyfishicon").stop(true);
-      }
       bubbling = false;
+      $("#jellyfishicon").stop(true);
       //$("#jellyfishicon").animate({left: "0"},400);
       
       clearTimeout(bubbleEvent);
@@ -781,9 +612,8 @@
 
     function fadeBubbles(){
       if(bubbleSine!=null){
-        if ((bubbleSine.gain.gain.value <= 0) && bubblesPlaying){
+        if (bubbleSine.gain.gain.value <= 0){
           bubbleSine.oscillator.stop(context.currentTime);
-          bubblesPlaying = false;
         }else{
           // cancel scheduled values...
           bubbleSine.gain.gain.cancelScheduledValues(context.currentTime);
@@ -823,263 +653,56 @@
         var drumsGainNode = context.createGain();
         drumsGainNode.gain.value = 3;
         playSound.connect(drumsGainNode);
-        drumsGainNode.connect(globalGain); 
+        drumsGainNode.connect(context.destination); 
         playSound.start(0);
         // animate
         $('#jellyfishicon').attr('src', "img/jellyfish-icon-swimming.png");
+        clearTimeout(imgChangeTimeout);
+        clearTimeout(imgPosResetTimeout);
+        imgChangeTimeout = setTimeout(function(){
+          $('#jellyfishicon').attr('src', "img/jellyfish-icon-straight.png");
+        }, 100);
         // animate img
         $( "#jellyfishicon" ).animate({
           top: "-=10",
-        }, 80, function(){
+        }, 80);
+        imgPosResetTimeout = setTimeout(function(){
           $( "#jellyfishicon" ).animate({
             top: "10px",
-          }, 80).attr('src', "img/jellyfish-icon-straight.png");
-        });
+          }, 80);
+        }, 20);
         timesPressed = (timesPressed + 1)%16;
       }
     }
-
-    function brokenDrums(){
-      var playSound = context.createBufferSource();
-      var bufNum;
-      // random buffer
-      bufNum = Math.floor(Math.random()*soundBuffers.length);
-      if(soundBuffers[bufNum]==null){
-        console.log("Error: empty sound buffer "+bufNum);
-      }else{
-        playSound.buffer = soundBuffers[bufNum]; // Attach buffer
-        var rate = 1;
-        // 20% faster, 80% slower
-        if(Math.random() > 0.8){
-            rate = (2+Math.random()*16);
-        }else{
-            rate = (0.001+(Math.random()*0.5));
-        }
-        playSound.playbackRate.value = (rate); // random playback rate
-        var drumsGainNode = context.createGain();
-        drumsGainNode.gain.value = 3;
-        playSound.connect(drumsGainNode);
-        drumsGainNode.connect(globalGain); 
-        playSound.start(0);
-        // animate
-        $('#jellyfishicon').attr('src', "img/jellyfish-icon-swimming.png");
-        // animate img
-        $( "#jellyfishicon" ).animate({
-          top: "-=10",
-        }, 80, function(){
-          $( "#jellyfishicon" ).animate({
-            top: "10px",
-          }, 80).attr('src', "img/jellyfish-icon-straight.png");
-        });
-      }
-    }
-
-    function loopy(){
-      // Stop if already playing:
-      loopOff();
-      // Play loopy saw wave patterns
-      // The saw wave:
-      loopySaw = new VCO(context, 'square', 200, 0.4);
-      // connect saw to VCA 
-      var vca = new VCA(context);
-      loopySaw.connect(vca);
-      loopyEnvelope = new AR_EnvelopeGenerator(context,0.5);
-      loopyEnvelope.attackTime=0.01;
-      loopyEnvelope.releaseTime=0.1;
-      loopyEnvelope.connect(vca.amplitude);
-      // make new biquad filter
-      biquadFilter = context.createBiquadFilter();
-      biquadFilter.type = "lowpass";
-      biquadFilter.frequency.value = 1000;
-      biquadFilter.Q.value = 10;
-      // connect vca to filter
-      vca.connect(biquadFilter);
-      // connect filter to output
-      biquadFilter.connect(globalGain);
-      // start oscillator
-      loopySaw.oscillator.start(context.currentTime);
-      if(loopyTimeout != null){
-        clearTimeout(loopyTimeout);
-      }
-      if(loopyAnimation != null){
-        clearTimeout(loopyAnimation);
-      }
-      animateLoopy();
-      doLoopy();
-    }
-
-    function loopOff(){
-      if(loopyAnimation != null){
-        clearTimeout(loopyAnimation);
-      }
-      $("#jellyfishicon").stop(true);
-      if(loopySaw!=null){
-        loopySaw.oscillator.stop(context.currentTime);
-      }
-    }
-
-    function doLoopy(){
-      // cancel scheduled values
-      loopySaw.oscillator.frequency.cancelScheduledValues(context.currentTime);
-      // set next freqs.length frequency value changes
-      // Time based on loopyDur
-      var timeOffset = 0;
-      var currentGain = loopySaw.gain.gain.value;
-      for(i = 0; i<(freqs.length); i++){
-        var loopFreq = loopyFreqs[i%freqs.length];
-        loopySaw.setFrequency(loopFreq, context.currentTime+timeOffset);
-        loopyEnvelope.trigger(context.currentTime+timeOffset);
-        timeOffset += loopyDurs[i];
-        if(fadingLoopy){
-          currentGain -= 0.008;
-          loopySaw.setGain(currentGain, context.currentTime+timeOffset);
-        }
-      }
-      if(loopySaw.gain.gain.value >= 0.001){
-        loopyTimeout = setTimeout(doLoopy,(loopyTotalDur*1000));
-      }else{
-        loopOff();
-      }
-    }
-
-    function animateLoopy(){
-      $( "#jellyfishicon" ).animate({
-        top: "+=10",
-      }, 60);
-      $( "#jellyfishicon" ).animate({
-        top: "0",
-      }, 120);
-      loopyAnimation = setTimeout(animateLoopy,loopyTotalDur*1000);
-    }
-
-    function resetLoopyFreqs(){
-      freqIndexArray = [];
-      for(i=0; i<freqs.length; i++){
-        freqIndexArray[i] = i;
-      }
-      freqIndexArray = shuffleArray(freqIndexArray);
-      lastIndex = freqIndexArray[freqIndexArray.length-1];
-      if(loopySaw != null){
-        if(Math.random()>0.5){
-          loopySaw.oscillator.type = 'square';
-        }else{
-          loopySaw.oscillator.type = 'sawtooth';
-        }
-      }      
-      loopyFreqs = freqs; //shuffleArray(freqs);
-      loopyDurs = [];
-      loopyTotalDur = 0;
-      var dur = [0.16,0.16,(0.16*3/2),0.16][Math.floor(Math.random()*4)];
-      if(freqs.length <= 1){
-        dur = 0.16;
-      }
-      for(var i=0; i<(loopyFreqs.length); i++){
-        loopyDurs[i] = dur;
-        loopyTotalDur += dur;
-      }
-    }
-
-    // Like long tones, but always on
+    // Play just one note of the overall chord...similar to longTones
     function oneNote(){
       // change img
-      $('#jellyfishicon').attr('src', "img/jellyfish-icon-white.png");
-      oneNoteOff();
+      $('#jellyfishicon').attr('src', "img/jellyfish-icon-swimming.png");
+      
+
+      // stop if already playing
+      if(currentStaticEnv != null){
+        currentStaticEnv.release();
+      }
+      if(currentStaticVCO != null){
+        currentStaticVCO.oscillator.stop(
+          context.currentTime+currentStaticEnv.releaseTime);
+      }
       // make new synth, envelope
-      oneNoteOsc = new VCO(context, 'sawtooth', myFreq, 0.0001);
-      // make new biquad filter
-      biquadFilter = context.createBiquadFilter();
-      biquadFilter.type = "lowpass";
-      biquadFilter.frequency.value = 1000;
-      biquadFilter.Q.value = 10;
-      // connect synth to filter
-      oneNoteOsc.connect(biquadFilter);
-      // connect filter to output
-      biquadFilter.connect(globalGain);
-      // start oscillator
-      oneNoteOsc.oscillator.start(context.currentTime);
-      oneNoteGainLoop();
-    }
-
-    function oneNoteOff(){
-      if(oneNoteOsc!=null){
-        oneNoteOsc.oscillator.stop(context.currentTime);
-      }
-    }
-
-    // Hacky function to make volume swells up and down
-    function oneNoteGainLoop(){
-      // cancel scheduled values
-      if (oneNoteTimeout != null){
-        clearTimeout(oneNoteTimeout);
-      }
-      oneNoteOsc.gain.gain.cancelScheduledValues(context.currentTime);
-      var currentGain = oneNoteOsc.gain.gain.value;
-      if(!fadingInOneNote){
-        $( "#jellyfishicon" ).css("opacity",currentGain);
-      }
-      // set next 100 gains 
-      for(i = 0; i<100; i++){
-        oneNoteOsc.setGain(currentGain, context.currentTime+(i/1000));
-        if(fadingInOneNote){
-          currentGain = currentGain*1.001;
-        }else{
-          currentGain = currentGain+oneNoteGainChange;
-        }
-        if(currentGain >= 0.3){
-          oneNoteGainChange = -0.0001;
-          fadingInOneNote = false;
-        }else if(currentGain <= 0.01){
-          oneNoteGainChange = 0.0001;
-        }
-      }
-      oneNoteTimeout = setTimeout(oneNoteGainLoop,100);
-    }
-
-    // Code to create pulse waves
-    //Pre-calculate the WaveShaper curves so that we can reuse them.
-    var pulseCurve=new Float32Array(256);
-    for(var i=0;i<128;i++) {
-      pulseCurve[i]= -1;
-      pulseCurve[i+128]=1;
-    }
-    var constantOneCurve=new Float32Array(2);
-    constantOneCurve[0]=1;
-    constantOneCurve[1]=1;
-
-    //Add a new factory method to the AudioContext object.
-    context.createPulseOscillator=function(){
-      //Use a normal oscillator as the basis of our new oscillator.
-      var node=this.createOscillator();
-      node.type="sawtooth";
-
-      //Shape the output into a pulse wave.
-      var pulseShaper=ac.createWaveShaper();
-      pulseShaper.curve=pulseCurve;
-      node.connect(pulseShaper);
-
-      //Use a GainNode as our new "width" audio parameter.
-      var widthGain=ac.createGain();
-      widthGain.gain.value=0; //Default width.
-      node.width=widthGain.gain; //Add parameter to oscillator node.
-      widthGain.connect(pulseShaper);
-
-      //Pass a constant value of 1 into the widthGain – so the "width" setting
-      //is duplicated to its output.
-      var constantOneShaper=this.createWaveShaper();
-      constantOneShaper.curve=constantOneCurve;
-      node.connect(constantOneShaper);
-      constantOneShaper.connect(widthGain);
-
-      //Override the oscillator's "connect" and "disconnect" method so that the
-      //new node's output actually comes from the pulseShaper.
-      node.connect=function() {
-        pulseShaper.connect.apply(pulseShaper, arguments);
-      }
-      node.disconnect=function() {
-        pulseShaper.disconnect.apply(pulseShaper, arguments);
-      }
-
-      return node;
+      var myVCO = new VCO(context, 'sawtooth', myFreq, 0.5);
+      currentStaticVCO = myVCO;
+      var myEnv = new ASR_EnvelopeGenerator(context,0.5);
+      currentStaticEnv = myEnv;
+      var atk = 2;
+      var rls = 4;
+      myEnv.attackTime=atk;
+      myEnv.releaseTime=rls;
+      // connect VCO to envelope
+      myVCO.connect(myEnv);
+      // connect envelope to output
+      myEnv.connect(context.destination);
+      myVCO.oscillator.start(context.currentTime);      
+      myEnv.trigger();
     }
   });
 
@@ -1096,6 +719,7 @@
   </div>
   <div id="ocean"></div>
   </div>
+  <button id="modeChangeButton">Change Modes</button>
 </body>
 
 </html>
