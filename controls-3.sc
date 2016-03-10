@@ -8,6 +8,10 @@ s.options.sampleRate = 48000;
 s.options.device = "Soundflower (64ch)";
 s.boot;
 s.waitForBoot({
+  n = NetAddr.new("pauline.mills.edu", 9000); // send messages to this address
+  // n = NetAddr.new("localhost", 9000); // send messages to this address
+  // n = NetAddr.new( "192.168.0.84", 9000);
+
   SynthDef(\agrlongtone, {
     |out=0, freq=230, time=1, gain=0.5|
     var sound, ampenv, filterenv, tremolo, depth;
@@ -77,6 +81,7 @@ s.waitForBoot({
   ~freqs = ([ 48, 50, 51, 53, 55, 56, 58, 60, 62, 63, 65, 67, 68, 70, 74 ]).midicps;
   ~userList = Set.new();
   ~globalGain = 1.0;
+  ~currentMode = "bubbles";
   // Function to distribute freqs in an array round-robin to each user
   ~redistributeFrequencies = {
 /*    ~userList.do{
@@ -94,6 +99,10 @@ s.waitForBoot({
     n.sendMsg("/play/freqs", * ~freqs);
     ~redistributeFrequencies.value();
   };
+  ~playManyFreqsAndRedistribute={
+    n.sendMsg("/play/manyfreqs", * ~freqs);
+    ~redistributeFrequencies.value();
+  };
   ~setFreqsAndRedistribute={
     n.sendMsg("/set/freqs", * ~freqs);
     ~redistributeFrequencies.value();
@@ -105,10 +114,6 @@ s.waitForBoot({
       Synth(\agrlongtone, [\freq, freq, \gain, 0.1, \time, 15, \out, channels[i%7]])
     }
   };
-  n = NetAddr.new("pauline.mills.edu", 9000); // send messages to this address
-  // n = NetAddr.new("localhost", 9000); // send messages to this address
-  // n = NetAddr.new( "192.168.0.84", 9000);
-
   thisProcess.openUDPPort(9002);
   n.sendMsg("/sys/subscribe",9002,"/"); // subscribe to all rhizome messages
   n.sendMsg("/mode", ~currentMode);
@@ -157,30 +162,17 @@ s.waitForBoot({
       1.wait;
     }
   }).play;
+  ~setFreqsAndRedistribute.value();
 });
 )
-
-// Utility messages
-n.sendMsg("/global/gain/", 0);
-n.sendMsg("/global/gain/", 1);
-Tdef(\changeFreqs).stop;
-Tdef(\playDrums).stop;
 
 //
 //
 // THE NIGHT OF LANGIS VVOLF IS UPON US
 //
 //
-
-// PART 1: BUBBLES
 (
-~currentMode = "bubbles";
-n.sendMsg("/mode", ~currentMode);
-)
-
-// PART 2: LONG TONES
-//
-(
+  // part 2 long tones
   ~currentMode = "long-tones";
   n.sendMsg("/mode", ~currentMode);
 n.sendMsg("/global/gain/", 1);
@@ -253,10 +245,7 @@ Tdef(\changeFreqs, {
   // PART 5: SUPERCOLLIDER BEATS + NOIZE
   Tdef(\superBeatz).play;
 }).play;
-)
 
-
-(
 Tdef(\brokenDrums,{
   var interval = 0.1;
   var step = 0;
@@ -414,7 +403,6 @@ var loopCount = 0;
         n.sendMsg("/mode", ~currentMode);
       });
     };
-    "BEATS OVER NOW".postln;
     Tdef(\melodicSection).play;
     // start renoise melodic section
     ~renoiseSynth = Synth(\agrsampler, [\buffer, ~renoiseMelodyBuffer, \numFrames, ~renoiseMelodyBuffer.numFrames,
@@ -427,88 +415,88 @@ Tdef(\melodicSection,{
   ~currentMode = "rising-fm";
   n.sendMsg("/mode", ~currentMode);
   1.do{
-    ~freqs = ([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]++([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]++([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]++([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 51, 54, 56, 58, 61, 63, 65, 66, 68, 70, 73, 77, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 51, 54, 56, 58, 61, 63, 65, 66, 68, 70, 73, 77, 78 ]++([ 51, 54, 56, 58, 61, 63, 65, 66, 68, 70, 73, 77, 78 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]++([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]++([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]++([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 51, 54, 56, 58, 61, 63, 65, 66, 68, 70, 73, 77, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 51, 54, 56, 58, 61, 63, 65, 66, 68, 70, 73, 77, 78 ]++([ 51, 54, 56, 58, 61, 63, 65, 66, 68, 70, 73, 77, 78 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 49, 51, 53, 56, 58, 60, 61, 63, 65, 68, 70 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 49, 51, 53, 56, 58, 60, 61, 63, 65, 68, 70 ]++([ 48, 49, 51, 53, 56, 58, 60, 61, 63, 65, 68, 70 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 51, 53, 54, 56, 58, 59, 61, 63, 65, 66, 68, 70, 71 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 51, 53, 54, 56, 58, 59, 61, 63, 65, 66, 68, 70, 71 ]++([ 49, 51, 53, 54, 56, 58, 59, 61, 63, 65, 66, 68, 70, 71 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 50, 53, 57, 59, 60, 62, 65, 69, 71, 72 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 50, 53, 57, 59, 60, 62, 65, 69, 71, 72 ]++([ 48, 50, 53, 57, 59, 60, 62, 65, 69, 71, 72 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 51, 53, 55, 58, 60, 63, 65, 67, 70, 72 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 51, 53, 55, 58, 60, 63, 65, 67, 70, 72 ]++([ 48, 51, 53, 55, 58, 60, 63, 65, 67, 70, 72 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 50, 54, 55, 57, 59, 61, 62, 66, 67, 69, 71, 73, 74 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 50, 54, 55, 57, 59, 61, 62, 66, 67, 69, 71, 73, 74 ]++([ 50, 54, 55, 57, 59, 61, 62, 66, 67, 69, 71, 73, 74 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 50, 54, 57, 59, 62, 66, 69, 71, 74 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 50, 54, 57, 59, 62, 66, 69, 71, 74 ]++([ 50, 54, 57, 59, 62, 66, 69, 71, 74 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 52, 53, 57, 59, 60, 62, 64, 65, 69, 71, 74 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 52, 53, 57, 59, 60, 62, 64, 65, 69, 71, 74 ]++([ 48, 52, 53, 57, 59, 60, 62, 64, 65, 69, 71, 74 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 50, 52, 54, 57, 59, 62, 64, 66, 69, 71, 74 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 50, 52, 54, 57, 59, 62, 64, 66, 69, 71, 74 ]++([ 50, 52, 54, 57, 59, 62, 64, 66, 69, 71, 74 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 51, 53, 56, 58, 60, 63, 65, 68, 70, 72 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 51, 53, 56, 58, 60, 63, 65, 68, 70, 72 ]++([ 48, 51, 53, 56, 58, 60, 63, 65, 68, 70, 72 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 50, 52, 54, 57, 60, 62, 64, 66, 69, 72 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 50, 52, 54, 57, 60, 62, 64, 66, 69, 72 ]++([ 48, 50, 52, 54, 57, 60, 62, 64, 66, 69, 72 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 51, 54, 56, 58, 59, 61, 63, 66, 68, 70, 71 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 51, 54, 56, 58, 59, 61, 63, 66, 68, 70, 71 ]++([ 49, 51, 54, 56, 58, 59, 61, 63, 66, 68, 70, 71 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 50, 53, 57, 58, 60, 62, 65, 69, 70, 72 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 50, 53, 57, 58, 60, 62, 65, 69, 70, 72 ]++([ 48, 50, 53, 57, 58, 60, 62, 65, 69, 70, 72 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]++([ 49, 50, 54, 56, 57, 61, 62, 66, 68, 69, 73, 74 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]++([ 49, 50, 54, 57, 59, 61, 62, 66, 69, 71, 74, 78 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]++([ 49, 53, 54, 58, 59, 61, 63, 65, 66, 70, 71, 75, 78 ]+12)).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
     ~currentMode = "loopy";
     n.sendMsg("/mode", ~currentMode);
-    ~freqs = ([ 51, 54, 56, 58, 61, 63, 65, 66, 68, 70, 73, 77, 78 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 51, 54, 56, 58, 61, 63, 65, 66, 68, 70, 73, 77, 78 ]).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 49, 51, 53, 56, 58, 60, 61, 63, 65, 68, 70 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 49, 51, 53, 56, 58, 60, 61, 63, 65, 68, 70 ]).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 49, 51, 53, 54, 56, 58, 59, 61, 63, 65, 66, 68, 70, 71 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 49, 51, 53, 54, 56, 58, 59, 61, 63, 65, 66, 68, 70, 71 ]).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
-    ~freqs = ([ 48, 50, 53, 57, 59, 60, 62, 65, 69, 71, 72 ]).midicps;
-    ~playFreqsAndRedistribute.value();
+    ~freqs = ([ 48, 50, 53, 57, 59, 60, 62, 65, 69, 71, 72 ]).asSet.asArray.sort.midicps;
+    ~playManyFreqsAndRedistribute.value();
     interval.wait;
 
     // PART 7 - LOOPY
@@ -519,6 +507,18 @@ Tdef(\melodicSection,{
 
 Tdef(\loopySection,{
   var interval = 2.56;
+  ~freqs = ([57, 69, 62, 65, 71, 60, 48, 72]).midicps;
+  ~setFreqsAndRedistribute.value();
+  interval.wait;
+  ~freqs = ([57, 69, 62, 64, 72, 60, 46]).midicps;
+  ~setFreqsAndRedistribute.value();
+  interval.wait;
+  ~freqs = ([57, 69, 62, 64, 71, 45]).midicps;
+  ~setFreqsAndRedistribute.value();
+  interval.wait;
+  ~freqs = ([57, 69, 60, 64, 71]).midicps;
+  ~setFreqsAndRedistribute.value();
+  interval.wait;
   ~freqs = ([60, 69, 64, 66, 71]).midicps;
   ~setFreqsAndRedistribute.value();
   interval.wait;
@@ -758,11 +758,12 @@ Tdef(\craziness1,{
 //
 // random tests
 //
-// manual end trigger
-~currentMode = "the-end";
-n.sendMsg("/mode", ~currentMode);
 
+(
 Tdef(\melodicSection).play;
+~renoiseSynth = Synth(\agrsampler, [\buffer, ~renoiseMelodyBuffer, \numFrames, ~renoiseMelodyBuffer.numFrames,
+      \sampleRate, ~renoiseMelodyBuffer.sampleRate, \rate, 1, \amp, 1, \out, 8]);
+)
 Tdef(\melodicSection).stop;
 Tdef(\agrRingMe).play;
 Tdef(\agrRingMe).stop;
@@ -770,6 +771,7 @@ Tdef(\loopySection).play;
 Tdef(\loopySection).stop;
 Tdef(\craziness1).play;
 Tdef(\craziness1).stop;
+Tdef(\changeFreqs).stop;
 
 ~freqs = ([50,69,80,59,54,61,57]).midicps;
 ~setFreqsAndRedistribute.value();
@@ -778,20 +780,21 @@ Tdef(\craziness1).stop;
 Synth(\agrring, [\pos, rrand(-2.0,2.0), \amp, 0.1, \sus, 2, \freq, 400*0.18]);
 Synth(\agrping, [ \freq, 400]);
 
-
-  ~currentMode = "bubbles";
-  n.sendMsg("/mode", ~currentMode);
-  ~currentMode = "long-tones";
-  n.sendMsg("/mode", ~currentMode);
-  ~currentMode = "rising-fm";
-  n.sendMsg("/mode", ~currentMode);
-  ~currentMode = "drums";
-  n.sendMsg("/mode", ~currentMode);
-  ~currentMode = "bubbles";
-  n.sendMsg("/mode", ~currentMode);
-  ~currentMode = "loopy";
-  n.sendMsg("/mode", ~currentMode);
-  ~currentMode = "one-note";
-  n.sendMsg("/mode", ~currentMode);
+~currentMode = "bubbles";
+n.sendMsg("/mode", ~currentMode);
+~currentMode = "long-tones";
+n.sendMsg("/mode", ~currentMode);
+~currentMode = "broken-drums";
+n.sendMsg("/mode", ~currentMode);
+~currentMode = "drums";
+n.sendMsg("/mode", ~currentMode);
+~currentMode = "rising-fm";
+n.sendMsg("/mode", ~currentMode);
+~currentMode = "loopy";
+n.sendMsg("/mode", ~currentMode);
+~currentMode = "one-note";
+n.sendMsg("/mode", ~currentMode);
+~currentMode = "the-end";
+n.sendMsg("/mode", ~currentMode);
 ~globalGain = 1;
 n.sendMsg("/global/gain", ~globalGain);

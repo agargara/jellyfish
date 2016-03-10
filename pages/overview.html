@@ -19,6 +19,7 @@
     $("#debug").text("");
     $("#footer").hide();
     $("#ocean").hide();
+    $("#other-jellyfish").hide();
     var otherDrift; // interval for drifting jellyfish
     var modes = ['long-tones','rising-fm','noise','drums', 'bubbles','broken-drums', 'loopy', 'one-note', 'the-end'];
     var modeIndex = 4;
@@ -97,7 +98,6 @@
             case 'the-end': modeIndex=8; break;
           }
           switchModes(modes[modeIndex]);
-          $("#footer").show();
           break;  
         case '/set/freqs':
           //
@@ -111,7 +111,7 @@
     });
 
     function switchModes (mode){
-      if(notStarted){
+      if(notStarted && mode!="the-end" && mode!="bubbles"){
         setTimeout(function(){
           $("#instructions").animate({
             top: "128px",
@@ -121,6 +121,8 @@
         notStarted=false;
       }
       if(mode != previousMode){
+      $("#other-jellyfish").show();
+      $("#footer").show();
       switch (mode) {
         case 'long-tones':
           // change instructions
@@ -143,7 +145,7 @@
           $("#instructions").animate({
             opacity: "0"
           },2000,function(){
-            $("#instructions").html("tap quickly to rise<br>tap slowly to descend")
+            $("#instructions").html("tap upper half to rise<br>tap bottom half to descend")
           }).animate({
             opacity: "1",
             color: "white"
@@ -182,17 +184,9 @@
           break;
         case 'bubbles':
           // change instructions
-          $("#instructions").animate({
-            opacity: "0"
-          },2000,function(){
-            $("#instructions").text("press, hold, move finger")
-          }).animate({
-            opacity: "1",
-            color: "black",
-          },2000);
           $('body').animate({
-            backgroundColor: "#BCABE3"
-          }, 100);
+            backgroundColor: "#A6A6ef"
+          }, 10000);
           break;
         case 'broken-drums':
           // change instructions
@@ -242,15 +236,22 @@
           break;
         case 'the-end':
           $("#ocean").hide();
+          $("#footer").hide();
           // change instructions
           $("#instructions").animate({
             opacity: "0"
           },2000,function(){
-            $("#instructions").html("終<br>end");
+            $("#instructions").html("thanks for<br>~Deep Sea Listening~");
           }).animate({
             opacity: "1",
             color: "white",
-          },2000);
+            top: "33%",
+            "font-size": "4em"
+          },2000,function(){
+            $("#instructions").animate({
+              opacity: "0"
+            }, 20000);
+          });
           $('#jellyfishfishicon').attr('src', "img/jellyfish-icon-white.png");
           $("#jellyfishicon").animate({
             opacity: "0.15"
@@ -286,10 +287,10 @@
   <span id="debug"></span>
   <div id="instructions">Please visit
     <h1>http://jellyfish.website</h1>
-    on a smartphone or other device with Chrome, Safari or Firefox. Make sure to include "http://".<br>
+    on a smartphone or other device with Chrome, Safari or Firefox. (Works best on Chrome) Make sure to include "http://".<br>
     Unmute and turn up your sound!<br>
     <br>
-    <div id="smaller">Note: If you are connected to the Mills "Guest" wireless network, use this address instead: <h2>http://192.168.0.84:8000</h2>
+    <div id="smaller">If you are connected to the Mills "Guest" wireless network, use this address instead: <h2>http://192.168.0.84:8000</h2>
       <br>
     Jellyfish might not function completely on some browsers. If you are unable to connect, please share with a neighbor or just sit back and enjoy the music!</div>
   </div>

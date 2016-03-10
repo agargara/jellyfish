@@ -135,7 +135,7 @@ function shuffleArray(array) {
             try{
               node.internal_stop( when || 0 );
             }catch (e){
-              console.error(e.name + ': ' + e.message);
+              //console.error(e.name + ': ' + e.message);
             };
           };
         }

@@ -47,13 +47,13 @@ button:active{
 #jellyarea {
 	height: 100%;
 	min-height: 100%;
-    margin-top: 85px;
 }
 
 #jellyfishicon {
     -webkit-touch-callout: none;
     position: relative; 
     top: 0px;
+    padding-top: 48px;
     width: 213px;
     height: auto;
 }
@@ -64,7 +64,7 @@ button:active{
     left: 0;
     position: absolute;
     width: 100%;
-    top: 8px;
+    bottom: 25%;
 }
 
 #ocean {
@@ -106,7 +106,7 @@ button:active{
         top: 280px;
         left: 10px;
     }
-    #jellyarea{
-        margin-top: 65px;
-    }
+/*    #jellyarea{
+        padding-top: 65px;
+    }*/
 }

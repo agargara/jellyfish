@@ -16,8 +16,8 @@
   <link rel="icon" type="image/png" href="img/favicon-16x16.png" sizes="16x16">
   <script>
   $( document ).ready(function(){
-    console.log = function(message) {$('#debug').append(message + '</br>');};
-    console.error = console.debug = console.info =  console.log;
+    //console.log = function(message) {$('#debug').append(message + '</br>');};
+    //console.error = console.debug = console.info =  console.log;
     $("#debug").text("");
     $("#ocean").hide();
     $("#instructions").css("opacity", "0");
@@ -46,6 +46,8 @@
     biquadFilter.type = "lowpass";
     biquadFilter.frequency.value = 1000;
     biquadFilter.Q.value = 10;
+    // connect filter to output
+    biquadFilter.connect(globalGain);
     var myFreq = 0;
     var currentIndex = 0;
     var freqIndexArray = [];
@@ -67,21 +69,27 @@
     var bubbleRate = 1.01;
     var bubbleFreqOffset = 0;
     var loopySaw;
-    var loopyEnvelope = null;
     var fadingLoopy = false;
     var fadingInOneNote = true;
     var oneNoteOsc = null;
     var oneNoteGainChange = 0.00001;
     var distortion = new Distortion(context);
-
-    //pinkNoise.connect(distortion);
+    // Start always-on nodes...
+    var loopyVCA = new VCA(context);
+    var loopyEnvelope = new AR_EnvelopeGenerator(context,0.5);
+    loopyEnvelope.attackTime=0.01;
+    loopyEnvelope.releaseTime=0.1;
+    loopyEnvelope.connect(loopyVCA.amplitude);
+    // connect vca to filter
+    loopyVCA.connect(biquadFilter);
     var padEnv;
+
+    // misc
     var shades = ["#26256F", "#302F8C", "#3937A6", "#4140BF", "#4A48D9", "#5351F2", "#5755FF"];
     var freqIndex = 0;
     var lastClick=Date.now();
     var interval = 1000000;
     var isPaused = false;
-    var driftDown = null;
     var bubbling=false;
     var bubbleFade = null;
     var bubbleEvent = null;
@@ -125,6 +133,10 @@
 
     $("#jellyarea").on('touchstart mousedown',function(e) {
       e.preventDefault();
+      var theEvent = (e.originalEvent)
+      if(theEvent.touches != undefined){
+        theEvent = theEvent.touches[0];
+      }
       isMouseDown = true;
       if(hasStarted){
         switch (modes[modeIndex]) {
@@ -134,7 +146,7 @@
             }
             break;
           case 'rising-fm':
-            risingFM();
+            risingFM(theEvent);
             break;
           case 'noise':
             noiseOn();
@@ -161,9 +173,13 @@
       }
     });
 
-    $("#jellyarea").on('mousemove',function(e){
+    $("#jellyarea").on('mousemove touchmove',function(e){
       e.preventDefault();
       if(isMouseDown){
+        e = (e.originalEvent)
+        if(e.touches != undefined){
+          e = (e.touches[0] || e.changedTouches[0]);
+        }
         // Y: 0 to screenHeight -> 8200 to 200
         biquadFilter.frequency.value = 200+((1-(e.pageY/$(window).height()))*8000);
         // X: 0 to screenWidth -> 0.1 to 20.1
@@ -183,29 +199,6 @@
         if(loopyEnvelope != null){
           loopyEnvelope.releaseTime = (((e.pageX/$(window).width()))*0.3)+0.01;
         }
-      }
-    });
-
-    $("#jellyarea").on('touchmove',function(e){
-      e.preventDefault();
-      var touch = e.originalEvent.touches[0] || e.originalEvent.changedTouches[0];
-      // Y: 0 to screenHeight -> 8200 to 200
-      biquadFilter.frequency.value = 200+((1-(touch.pageY/$(window).height()))*8000);
-      // X: 0 to screenWidth -> 0.1 to 20.1
-      biquadFilter.Q.value = 0.1+((touch.pageX/$(window).width())*20);
-
-      // Y: 0 to screenHeight -> rate 1.01 to 1.07
-      bubbleRate = 1.01+((1-(touch.pageY/$(window).height()))*0.06);
-      // X: 0 to screenWidth -> freq offset -1000 to 100
-      bubbleFreqOffset = (((touch.pageX/$(window).width()))*1100)-1000;
-      // X+Y: 0 to screenHeight+screenWidth -> bubbleAnimationRate
-      bubbleAnimationRate = 100+((
-        (1-(touch.pageX/$(window).width())+
-        (touch.pageY/$(window).height()))
-      )*50);
-      // X: 0 to screenWidth -> loopy env release
-      if(loopyEnvelope != null){
-        loopyEnvelope.releaseTime = (((touch.pageX/$(window).width()))*0.3)+0.01;
       }
     });
 
@@ -265,7 +258,8 @@
     var userList = {}; // keep track of connected users.
     // handle messages
     rhizome.on('message', function(address, args) {
-      $("#message").html(address + ", " + args);
+      // $("#message").html(address + ", " + args);
+      // console.log(address + ", " + args);
       switch (address) {
         case '/'+myId+'/freq':
           myFreq = args[0];
@@ -320,6 +314,34 @@
           };
           padEnv.trigger();
           break;
+        case '/play/manyfreqs':
+          // animate ocean
+          // animate img
+          $("#ocean").show();
+          $( "#ocean" ).animate({
+            top: "300px",
+          }, 1800);
+          $( "#ocean" ).animate({
+            top: "500px",
+          }, 2200);
+          freqs = args;
+          resetLoopyFreqs();
+          // clear old pads
+          for(var i=0; i<pads.length; i++){
+            pads[i].oscillator.stop(context.currentTime);
+            pads[i] = null;
+          }
+          // make new pads
+          pads = [];
+          if(freqs.length > 9){
+            for (var i=0; i<10; i++){
+              pads.push(new VCO(context, 'sawtooth', freqs[i], 0.5));
+              pads[i].connect(padVCA);
+              pads[i].oscillator.start(context.currentTime);
+            };
+            padEnv.trigger();
+          }
+          break;
         case '/set/freqs':
           freqs = args;
           resetLoopyFreqs();
@@ -366,9 +388,6 @@
         loopOff();
       }
       oneNoteOff();
-      if(driftDown != null){
-        clearInterval(driftDown);
-      }
       switch (mode) {
         case 'long-tones':
           // change instructions
@@ -389,24 +408,11 @@
           $("#instructions").animate({
             opacity: "0"
           },2000,function(){
-            $("#instructions").html("tap quickly to rise<br>tap slowly to descend")
+            $("#instructions").html("tap upper half to rise<br>tap bottom half to descend")
           }).animate({
             opacity: "1",
             color: "white"
           },2000);
-          driftDown = setInterval(function(){ 
-            // jellyfish always goin' down...
-            if((Date.now() - lastClick > 250)){
-              freqIndex = freqIndex - 1;
-              if(freqIndex < 0){
-                freqIndex = 0;
-             };
-             $('body').animate({
-                backgroundColor: shadeColor("#26256F",linlin(
-                 freqIndex, 0, freqs.length, -0.8, 0.6)),
-              }, 500);
-           };
-          }, 500);
           break;
         case 'noise':
           // change instructions
@@ -584,11 +590,6 @@
       myEnv.releaseTime=rls;
       // connect VCO to envelope
       myVCO.connect(myEnv);
-      // make new biquad filter
-      biquadFilter = context.createBiquadFilter();
-      biquadFilter.type = "lowpass";
-      biquadFilter.frequency.value = 1000;
-      biquadFilter.Q.value = 10;
       // connect envelope to filter
       myEnv.connect(biquadFilter);
       // connect filter to output
@@ -606,12 +607,9 @@
           currentStaticVCO = null;
         }
         currentStaticEnv = null;
-        
       }
     }
-    function risingFM(){
-      var speed = (Date.now() - lastClick);
-      lastClick = Date.now();
+    function risingFM(theEvent){
       // change img
       $('#jellyfishicon').attr('src', "img/jellyfish-icon-swimming.png");
       // animate img
@@ -622,10 +620,10 @@
           top: "10px",
         }, 80).attr('src', "img/jellyfish-icon-straight.png");
       });
-      if (speed < 280){ // fast press
+      if (theEvent.pageY < ($(window).height()/2)){ // touch top
         freqIndex = freqIndex + 1;
-      }else if (speed > 500){ // slow press
-        freqIndex = freqIndex;
+      }else{ // touch bottom
+        freqIndex = freqIndex - 1;
       }
       $('body').stop(true,false);
       $('body').animate({
@@ -681,11 +679,6 @@
       whiteNoise = new WhiteNoise(context, 0.25);
       whiteNoise.node.start(context.currentTime);
       noiseSine.connect(whiteNoise.node.playbackRate);
-      // make new biquad filter
-      biquadFilter = context.createBiquadFilter();
-      biquadFilter.type = "lowpass";
-      biquadFilter.frequency.value = 1000;
-      biquadFilter.Q.value = 10;
       // connect noise to filter
       whiteNoise.connect(biquadFilter);
       // connect filter to output
@@ -695,6 +688,8 @@
     }
     function noiseOff(){
       if(whiteNoise!=null){
+        noiseSine.oscillator.stop(context.currentTime);
+        whiteNoise.node.stop(context.currentTime);
         whiteNoise.disconnect();
         whiteNoise = null;
       }
@@ -714,9 +709,6 @@
       bubbleSine.setGain(0.7);
       bubbleSine.oscillator.start(context.currentTime);
       bubblesPlaying = true;
-      // if(bubbleEvent != null){
-      //  bubbleEvent.clear();
-      // }
       clearTimeout(bubbleEvent);
       clearTimeout(bubbleAnimation);
       processBubbles();
@@ -768,15 +760,13 @@
     }
     function bubblesOff(){
       if(bubbling){
+        bubbling = false;
         $("#jellyfishicon").stop(true);
+        clearTimeout(bubbleEvent);
+        clearTimeout(bubbleAnimation);
+        // fade out
+        fadeBubbles();
       }
-      bubbling = false;
-      //$("#jellyfishicon").animate({left: "0"},400);
-      
-      clearTimeout(bubbleEvent);
-      clearTimeout(bubbleAnimation);
-      // fade out
-      fadeBubbles();
     }
 
     function fadeBubbles(){
@@ -793,7 +783,9 @@
             bubbleGain = Math.max(bubbleGain-0.01,0);
             bubbleSine.setGain(bubbleGain, context.currentTime+(i/1000));
           }
-          bubbleFade = setTimeout(fadeBubbles,100);
+          if(bubblesPlaying){
+            bubbleFade = setTimeout(fadeBubbles,100);
+          }
         }
       }
     }
@@ -881,21 +873,9 @@
       // The saw wave:
       loopySaw = new VCO(context, 'square', 200, 0.4);
       // connect saw to VCA 
-      var vca = new VCA(context);
-      loopySaw.connect(vca);
-      loopyEnvelope = new AR_EnvelopeGenerator(context,0.5);
-      loopyEnvelope.attackTime=0.01;
-      loopyEnvelope.releaseTime=0.1;
-      loopyEnvelope.connect(vca.amplitude);
-      // make new biquad filter
-      biquadFilter = context.createBiquadFilter();
-      biquadFilter.type = "lowpass";
-      biquadFilter.frequency.value = 1000;
-      biquadFilter.Q.value = 10;
-      // connect vca to filter
-      vca.connect(biquadFilter);
-      // connect filter to output
-      biquadFilter.connect(globalGain);
+      loopySaw.connect(loopyVCA);
+
+      
       // start oscillator
       loopySaw.oscillator.start(context.currentTime);
       if(loopyTimeout != null){
@@ -915,6 +895,7 @@
       $("#jellyfishicon").stop(true);
       if(loopySaw!=null){
         loopySaw.oscillator.stop(context.currentTime);
+        loopySaw = null;
       }
     }
 
