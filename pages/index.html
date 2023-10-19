@@ -16,7 +16,7 @@
   <link rel="icon" type="image/png" href="img/favicon-16x16.png" sizes="16x16">
   <script>
   $( document ).ready(function(){
-    $(modeChangeButton).on('touchend mouseup touchcancel touchleave',function(e){
+    $('#modeChangeButton').on('touchend mouseup touchcancel touchleave',function(e){
       e.preventDefault();
       modeIndex = (modeIndex+1) % (modes.length-1); // leave out oneNote for now
       switchModes(modes[modeIndex]);
